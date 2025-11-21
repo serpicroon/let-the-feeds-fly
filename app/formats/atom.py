@@ -5,11 +5,13 @@ from app.core.logger import logger
 from app.formats import FeedFormat
 
 _FORMAT = FeedFormat.ATOM.value
+_NS = {'atom': 'http://www.w3.org/2005/Atom'}
 
 def extract(content: bytes, parsed) -> Tuple[Optional[Meta], List[Entry]]:
     try:
         root = etree.fromstring(content)
-        entry_elements = root.xpath('/feed/entry')
+        
+        entry_elements = root.xpath('/atom:feed/atom:entry', namespaces=_NS)
         
         for entry_elem in entry_elements:
             entry_elem.getparent().remove(entry_elem)
@@ -24,7 +26,7 @@ def extract(content: bytes, parsed) -> Tuple[Optional[Meta], List[Entry]]:
         )
         
         root = etree.fromstring(content)
-        entry_elements = root.xpath('/feed/entry')
+        entry_elements = root.xpath('/atom:feed/atom:entry', namespaces=_NS)
         
         entries = [
             Entry(
@@ -43,10 +45,10 @@ def rebuild(meta: Meta, entries: List[Entry], self_url: str) -> str:
     try:
         root = etree.fromstring(meta.serialized.encode('utf-8'))
         
-        for link in root.xpath('/feed/link[@rel="self"]'):
+        for link in root.xpath('/atom:feed/atom:link[@rel="self"]', namespaces=_NS):
             link.set('href', self_url)
         
-        updated_elems = root.xpath('/feed/updated')
+        updated_elems = root.xpath('/atom:feed/atom:updated', namespaces=_NS)
         if updated_elems:
             from datetime import datetime, timezone
             updated_elems[0].text = datetime.now(timezone.utc).isoformat() + 'Z'
