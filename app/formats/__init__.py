@@ -8,9 +8,9 @@ class FeedFormat(str, Enum):
     @property
     def content_type(self) -> str:
         return {
-            FeedFormat.RSS2: 'application/rss+xml',
-            FeedFormat.ATOM: 'application/atom+xml',
-            FeedFormat.JSON_FEED: 'application/json'
+            FeedFormat.RSS2: 'application/rss+xml; charset=utf-8',
+            FeedFormat.ATOM: 'application/atom+xml; charset=utf-8',
+            FeedFormat.JSON_FEED: 'application/json; charset=utf-8'
         }[self]
     
     @classmethod
