@@ -4,6 +4,7 @@ from app.schemas import Meta, Entry
 from app.core.logger import logger
 from app.formats import FeedFormat
 from app.utils.feed import compute_feed_updated_time
+from app.utils.time import iso_to_http_date
 
 _FORMAT = FeedFormat.RSS2.value
 
@@ -59,7 +60,8 @@ def rebuild(meta: Meta,
         
         last_build_dates = root.xpath('/rss/channel/lastBuildDate')
         if last_build_dates:
-            last_build_dates[0].text = cutoff_time
+            # RSS 2.0 requires RFC 822 date format (e.g., 'Wed, 24 Nov 2025 12:00:00 GMT')
+            last_build_dates[0].text = iso_to_http_date(cutoff_time)
 
         for entry_data in entries:
             item_elem = etree.fromstring(entry_data.serialized.encode('utf-8'))
