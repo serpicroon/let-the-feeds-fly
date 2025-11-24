@@ -19,7 +19,6 @@ class FeedFormat(str, Enum):
         """Detect feed format from feedparser output"""
         version = getattr(parsed, 'version', '').lower()
 
-        return cls.JSON_FEED
         if not version:
             raise ValueError("Unable to detect feed format: no version found")
 
