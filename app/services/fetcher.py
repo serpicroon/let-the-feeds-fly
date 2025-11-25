@@ -1,6 +1,6 @@
 import httpx
 from typing import Optional
-from app.db import upsert_meta, upsert_entry, now_iso
+from app.core.db import upsert_meta, upsert_entry, now_iso
 from app.formats.handler import extract
 from app.core.logger import logger
 from app.core.config import get_settings

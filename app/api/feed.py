@@ -4,7 +4,7 @@ from typing import Literal
 
 from app.core.config import get_settings
 from app.core.logger import logger
-from app.db import get_meta, get_mature_entries, compute_hash
+from app.core.db import get_meta, get_mature_entries, compute_hash
 from app.services.fetcher import sync_with_upstream
 from app.formats import FeedFormat
 from app.formats.handler import rebuild

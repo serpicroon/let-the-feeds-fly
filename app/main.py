@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 
 from app.core.config import get_settings
 from app.core.logger import logger
-from app.db import init_db
+from app.core.db import init_db
 from app.api import api_router
 
 settings = get_settings()
