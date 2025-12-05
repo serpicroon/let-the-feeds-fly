@@ -20,3 +20,42 @@ Ever subscribed to a forum's "latest posts" RSS feed, only to read threads with 
 - **XML Pass-Through**: Stores original XML/JSON content to ensure high-fidelity feed reconstruction.
 - **HTTP Caching**: Supports ETag and Last-Modified headers for both upstream (conditional requests) and downstream (304 responses) to save bandwidth.
 - **Format Preservation**: Outputs the same format as the upstream feed (RSS 2.0, Atom, or JSON Feed).
+
+## Usage
+
+```
+GET /feed?url=<RSS_URL>&delay=<NUMBER>&unit=<UNIT>&limit=<NUMBER>
+```
+
+| Parameter | Required | Default | Description |
+|-----------|----------|---------|-------------|
+| `url` | ✅ | - | Original RSS feed URL |
+| `delay` | - | `1` | Delay duration |
+| `unit` | - | `hour` | `minute` / `hour` / `day` |
+| `limit` | - | `20` | Max entries (1-200) |
+
+**Example:** Delay a forum feed by 6 hours:
+```
+http://localhost:8000/feed?url=https://linux.do/latest.rss&delay=6&unit=hour
+```
+
+Add the proxy URL to your RSS reader. It returns the same format as the original feed.
+
+## Deployment
+
+### Docker (Recommended)
+
+```bash
+docker compose up -d
+```
+
+See [`docker-compose.yaml`](docker-compose.yaml) for configuration.
+
+### Manual
+
+```bash
+pip install -r requirements.txt
+python run.py
+```
+
+The server runs on `http://localhost:8000` by default.
