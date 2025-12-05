@@ -1,4 +1,4 @@
-import httpx
+from curl_cffi.requests import AsyncSession
 from typing import Optional
 from app.core.db import upsert_meta, upsert_entry, now_iso
 from app.formats.handler import extract
@@ -20,9 +20,15 @@ async def sync_with_upstream(
     if last_modified:
         headers['If-Modified-Since'] = last_modified
     
-    async with httpx.AsyncClient(follow_redirects=True, timeout=settings.http_timeout) as client:
+    async with AsyncSession() as client:
         try:
-            response = await client.get(url, headers=headers)
+            response = await client.get(
+                url,
+                headers=headers,
+                impersonate="chrome",
+                timeout=settings.http_timeout,
+                allow_redirects=True
+            )
             
             if response.status_code == 304:
                 logger.info(f"Feed not modified: {url}")
@@ -31,7 +37,7 @@ async def sync_with_upstream(
             response.raise_for_status()
             content = response.content
             
-        except httpx.HTTPError as e:
+        except Exception as e:
             logger.error(f"HTTP error fetching {url}: {e}")
             raise e
     
