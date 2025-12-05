@@ -7,6 +7,8 @@ from app.utils.feed import compute_feed_updated_time
 from app.utils.time import iso_to_http_date
 
 _FORMAT = FeedFormat.RSS2.value
+_ATOM_NS = 'http://www.w3.org/2005/Atom'
+_NS = {'atom': _ATOM_NS}
 
 def extract(content: bytes, parsed) -> Tuple[Optional[Meta], List[Entry]]:
     try:
@@ -54,9 +56,15 @@ def rebuild(meta: Meta,
         
         channel = channels[0]
         
-        link_elems = root.xpath('/rss/channel/link')
-        if link_elems:
-            link_elems[0].text = self_url
+        atom_links = root.xpath('/rss/channel/atom:link[@rel="self"]', namespaces=_NS)
+        if atom_links:
+            atom_links[0].set('href', self_url)
+        else:
+            atom_link = etree.Element(f'{{{_ATOM_NS}}}link', nsmap=_NS)
+            atom_link.set('rel', 'self')
+            atom_link.set('type', 'application/rss+xml')
+            atom_link.set('href', self_url)
+            channel.insert(0, atom_link)
         
         last_build_dates = root.xpath('/rss/channel/lastBuildDate')
         if last_build_dates:
