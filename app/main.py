@@ -5,6 +5,7 @@ from app.core.config import get_settings
 from app.core.logger import logger
 from app.core.db import init_db
 from app.api import api_router
+from app.services.cleanup import cleanup_service
 
 settings = get_settings()
 
@@ -13,9 +14,11 @@ async def lifespan(app: FastAPI):
     """Application lifespan events"""
     # Startup
     await init_db()
+    await cleanup_service.start()
     logger.info("Application started")
     yield
     # Shutdown
+    await cleanup_service.stop()
     logger.info("Application shutting down")
 
 app = FastAPI(

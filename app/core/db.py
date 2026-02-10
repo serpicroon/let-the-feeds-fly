@@ -1,6 +1,6 @@
 import aiosqlite
 import hashlib
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 from app.core.logger import logger
 from app.schemas import Meta, Entry
@@ -131,3 +131,46 @@ async def get_mature_entries(feed: str, cutoff: str, limit: int = 200) -> List[E
         """, (feed, cutoff, limit)) as cursor:
             rows = await cursor.fetchall()
             return [Entry(**dict(row)) for row in rows]
+
+async def cleanup_old_entries(days: int) -> int:
+    """Delete entries older than specified days based on discovered_at.
+    
+    Args:
+        days: Number of days to keep entries
+        
+    Returns:
+        Number of deleted entries
+    """
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).replace(microsecond=0).isoformat().replace('+00:00', 'Z')
+    
+    async with aiosqlite.connect(settings.database) as db:
+        cursor = await db.execute(
+            "DELETE FROM entries WHERE discovered_at < ?",
+            (cutoff,)
+        )
+        deleted_count = cursor.rowcount
+        await db.commit()
+        
+        if deleted_count > 0:
+            logger.info(f"Cleaned up {deleted_count} entries older than {days} days")
+        
+        return deleted_count
+
+async def cleanup_orphan_meta() -> int:
+    """Delete meta records that have no associated entries.
+    
+    Returns:
+        Number of deleted meta records
+    """
+    async with aiosqlite.connect(settings.database) as db:
+        cursor = await db.execute("""
+            DELETE FROM meta 
+            WHERE feed NOT IN (SELECT DISTINCT feed FROM entries)
+        """)
+        deleted_count = cursor.rowcount
+        await db.commit()
+        
+        if deleted_count > 0:
+            logger.info(f"Cleaned up {deleted_count} orphan meta records")
+        
+        return deleted_count
