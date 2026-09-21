@@ -25,7 +25,6 @@ async def sync_with_upstream(
             response = await client.get(
                 url,
                 headers=headers,
-                impersonate="chrome",
                 timeout=settings.http_timeout,
                 allow_redirects=True
             )
