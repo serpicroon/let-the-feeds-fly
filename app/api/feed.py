@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response, Depends
 from email.utils import parsedate_to_datetime
 from typing import Literal
 
-from app.core.config import get_settings
+from app.core.config import get_settings, get_scheduled_urls
 from app.core.logger import logger
 from app.core.db import get_meta, get_mature_entries, compute_hash
 from app.services.fetcher import sync_with_upstream
@@ -38,53 +38,53 @@ async def get_delayed_feed(
 ):
     """
     Get a delayed RSS feed.
-    
+
     - **url**: The upstream RSS feed URL (required)
     - **delay**: Delay duration (default: 1, must be >= 0)
     - **unit**: Time unit - minute, hour, or day (default: hour)
     - **limit**: Maximum number of entries to return (default: 20, max: 200)
-    
+
     Returns the feed with only "mature" entries (published_at <= now - delay).
     """
     delay_seconds = delay * DELAY_UNITS[unit]
-    
+
     meta = await get_meta(url)
-    
-    try:
-        status_code = await sync_with_upstream(
-            url,
-            etag=meta.etag if meta else None,
-            last_modified=meta.last_modified if meta else None
-        )
-        
-        if status_code >= 200 and status_code < 300:
-            meta = await get_meta(url)
-            
-    except Exception as e:
-        logger.error(f"Failed to sync feed {url}: {e}", exc_info=True)
-    
+
+    if url.strip() in get_scheduled_urls():
+        logger.info(f"Serving scheduled feed from local data, request-time sync skipped: {url}")
+    else:
+        try:
+            status_code = await sync_with_upstream(
+                url,
+                etag=meta.etag if meta else None,
+                last_modified=meta.last_modified if meta else None
+            )
+
+            if status_code >= 200 and status_code < 300:
+                meta = await get_meta(url)
+
+        except Exception as e:
+            logger.error(f"Failed to sync feed {url}: {e}", exc_info=True)
+
     if not meta:
         raise HTTPException(status_code=502, detail="No feed data available")
-    
+
     cutoff = get_cutoff_time(delay_seconds)
     logger.debug(f"Fetching mature entries for {url} with cutoff {cutoff}")
 
     entries = await get_mature_entries(url, cutoff, limit=limit)
     logger.debug(f"Returning {len(entries)} entries from {url}")
-    
+
     self_url = str(request.url)
-    
-    # Compute ETag
+
     content_etag = compute_hash(
         '|'.join([e.hash for e in (meta, *entries)])
     )
-    
-    # Compute Last-Modified from meta and entries, convert to HTTP-date format
+
     entry_times = [e.discovered_at for e in entries if e.discovered_at] if entries else []
     last_modified_iso = get_latest_iso_time(meta.updated_at, meta.created_at, *entry_times)
     last_modified_http = iso_to_http_date(last_modified_iso)
-    
-    # Check client cache (ETag)
+
     client_etag = request.headers.get('If-None-Match')
     logger.debug(f"Client ETag: {client_etag}, Content ETag: {content_etag}")
     if client_etag and client_etag.strip('"') == content_etag:
@@ -95,8 +95,7 @@ async def get_delayed_feed(
                 'Last-Modified': last_modified_http or ''
             }
         )
-    
-    # Check client cache (Last-Modified)
+
     client_last_modified = request.headers.get('If-Modified-Since')
     logger.debug(f"Client Last-Modified: {client_last_modified}, Server Last-Modified: {last_modified_http}")
     if client_last_modified and last_modified_http:
@@ -113,11 +112,10 @@ async def get_delayed_feed(
                 )
         except (ValueError, TypeError):
             pass
-    
-    # Rebuild feed
+
     format = FeedFormat(meta.format)
     output = rebuild(meta, entries, format, self_url, cutoff)
-    
+
     return Response(
         content=output,
         media_type=format.content_type,
@@ -126,4 +124,3 @@ async def get_delayed_feed(
             'Last-Modified': last_modified_http or ''
         }
     )
-

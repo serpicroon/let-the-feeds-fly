@@ -6,18 +6,19 @@ from app.core.logger import logger
 from app.core.db import init_db
 from app.api import api_router
 from app.services.cleanup import cleanup_service
+from app.services.scheduler import scheduler_service
 
 settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan events"""
-    # Startup
     await init_db()
     await cleanup_service.start()
+    await scheduler_service.start()
     logger.info("Application started")
     yield
-    # Shutdown
+    await scheduler_service.stop()
     await cleanup_service.stop()
     logger.info("Application shutting down")
 
@@ -30,7 +31,6 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# Include API routes
 app.include_router(api_router)
 
 if __name__ == "__main__":

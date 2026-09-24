@@ -1,5 +1,6 @@
 import aiosqlite
 import hashlib
+from collections.abc import Collection
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 from app.core.logger import logger
@@ -25,7 +26,7 @@ async def init_db():
             created_at TEXT NOT NULL
         );
         """)
-        
+
         await db.execute("""
             CREATE TABLE IF NOT EXISTS entries (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -39,12 +40,12 @@ async def init_db():
                 created_at TEXT NOT NULL
             );
         """)
-        
+
         await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_meta_feed ON meta(feed);")
-        
+
         await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_entries_feed_hash ON entries(feed, hash);")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_entries_feed_published_discovered ON entries(feed, published_at DESC, discovered_at DESC);")
-        
+
         await db.commit()
         logger.info("Database initialized successfully.")
 
@@ -58,11 +59,11 @@ def now_iso() -> str:
 async def upsert_meta(meta: Meta) -> None:
     hash_value = compute_hash(meta.serialized)
     now = now_iso()
-    
+
     async with aiosqlite.connect(settings.database) as db:
         async with db.execute("SELECT hash, updated_at FROM meta WHERE feed = ?", (meta.feed,)) as cursor:
             existing = await cursor.fetchone()
-        
+
         if existing:
             old_hash, old_updated_at = existing
             if old_hash != hash_value:
@@ -84,7 +85,7 @@ async def upsert_meta(meta: Meta) -> None:
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (meta.feed, meta.format, hash_value, meta.etag, meta.last_modified,
                   meta.updated, meta.serialized, now, now))
-        
+
         await db.commit()
 
 async def get_meta(feed: str) -> Optional[Meta]:
@@ -96,14 +97,14 @@ async def get_meta(feed: str) -> Optional[Meta]:
 
 async def upsert_entry(entry: Entry) -> None:
     now = now_iso()
-    
+
     async with aiosqlite.connect(settings.database) as db:
         async with db.execute(
-            "SELECT serialized, published_at FROM entries WHERE feed = ? AND hash = ?", 
+            "SELECT serialized, published_at FROM entries WHERE feed = ? AND hash = ?",
             (entry.feed, entry.hash)
         ) as cursor:
             existing = await cursor.fetchone()
-        
+
         if existing:
             old_serialized, old_published_at = existing
             if old_serialized != entry.serialized or old_published_at != entry.published_at:
@@ -117,7 +118,7 @@ async def upsert_entry(entry: Entry) -> None:
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, (entry.feed, entry.format, entry.guid, entry.hash,
                   entry.serialized, entry.published_at, entry.discovered_at, now))
-        
+
         await db.commit()
 
 async def get_mature_entries(feed: str, cutoff: str, limit: int = 200) -> List[Entry]:
@@ -134,15 +135,15 @@ async def get_mature_entries(feed: str, cutoff: str, limit: int = 200) -> List[E
 
 async def cleanup_old_entries(days: int) -> int:
     """Delete entries older than specified days based on discovered_at.
-    
+
     Args:
         days: Number of days to keep entries
-        
+
     Returns:
         Number of deleted entries
     """
     cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).replace(microsecond=0).isoformat().replace('+00:00', 'Z')
-    
+
     async with aiosqlite.connect(settings.database) as db:
         cursor = await db.execute(
             "DELETE FROM entries WHERE discovered_at < ?",
@@ -150,27 +151,38 @@ async def cleanup_old_entries(days: int) -> int:
         )
         deleted_count = cursor.rowcount
         await db.commit()
-        
+
         if deleted_count > 0:
             logger.info(f"Cleaned up {deleted_count} entries older than {days} days")
-        
+
         return deleted_count
 
-async def cleanup_orphan_meta() -> int:
+async def cleanup_orphan_meta(exempt_feeds: Collection[str] | None = None) -> int:
     """Delete meta records that have no associated entries.
-    
+
+    Args:
+        exempt_feeds: Feeds to keep even when they have no entries
+
     Returns:
         Number of deleted meta records
     """
+    exempt = [feed for feed in (exempt_feeds or []) if feed]
+    query = """
+        DELETE FROM meta
+        WHERE feed NOT IN (SELECT DISTINCT feed FROM entries)
+    """
+    params: list[str] = []
+    if exempt:
+        placeholders = ",".join("?" for _ in exempt)
+        query += f"AND feed NOT IN ({placeholders})"
+        params.extend(exempt)
+
     async with aiosqlite.connect(settings.database) as db:
-        cursor = await db.execute("""
-            DELETE FROM meta 
-            WHERE feed NOT IN (SELECT DISTINCT feed FROM entries)
-        """)
+        cursor = await db.execute(query, params)
         deleted_count = cursor.rowcount
         await db.commit()
-        
+
         if deleted_count > 0:
             logger.info(f"Cleaned up {deleted_count} orphan meta records")
-        
+
         return deleted_count
